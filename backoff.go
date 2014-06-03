@@ -36,3 +36,24 @@ func (bw *BackoffWaiter) Reset() {
 func (bw *BackoffWaiter) WaitCalledCount() int {
 	return bw.waitCalledCount
 }
+
+func (bw *BackoffWaiter) Try(attempts int, f func() error) error {
+	for {
+		err := f()
+		if err != nil {
+			if bw.waitCalledCount >= attempts-1 {
+				return err
+			} else {
+				bw.Wait()
+				continue
+			}
+		}
+
+		return nil
+	}
+}
+
+func Try(maxWait, attempts int, f func() error) error {
+	bw := NewBackoffWaiter(maxWait)
+	return bw.Try(attempts, f)
+}
