@@ -4,6 +4,14 @@ import (
 	"time"
 )
 
+type FatalError struct {
+	Err error
+}
+
+func (fe FatalError) Error() string {
+	return fe.Err.Error()
+}
+
 type BackoffWaiter struct {
 	a               int
 	b               int
@@ -41,6 +49,10 @@ func (bw *BackoffWaiter) Try(attempts int, f func() error) error {
 	for {
 		err := f()
 		if err != nil {
+			if fatalErr, ok := err.(FatalError); ok {
+				return fatalErr.Err
+			}
+
 			if bw.waitCalledCount >= attempts-1 {
 				return err
 			} else {
