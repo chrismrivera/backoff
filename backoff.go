@@ -65,7 +65,30 @@ func (bw *BackoffWaiter) Try(attempts int, f func() error) error {
 	}
 }
 
+func (bw *BackoffWaiter) TryWithDeadline(relativeDeadline time.Duration, f func() error) error {
+	deadline := time.Now().Add(relativeDeadline)
+
+	for {
+		err := f()
+		if err != nil {
+			if time.Now().After(deadline) {
+				return err
+			} else {
+				bw.Wait()
+				continue
+			}
+		}
+
+		return nil
+	}
+}
+
 func Try(maxWait, attempts int, f func() error) error {
 	bw := NewBackoffWaiter(maxWait)
 	return bw.Try(attempts, f)
+}
+
+func TryWithDeadline(maxWait int, relativeDeadline time.Duration, f func() error) error {
+	bw := NewBackoffWaiter(maxWait)
+	return bw.TryWithDeadline(relativeDeadline, f)
 }
