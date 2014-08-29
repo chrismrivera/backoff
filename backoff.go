@@ -71,6 +71,10 @@ func (bw *BackoffWaiter) TryWithDeadline(relativeDeadline time.Duration, f func(
 	for {
 		err := f()
 		if err != nil {
+			if fatalErr, ok := err.(FatalError); ok {
+				return fatalErr.Err
+			}
+
 			if time.Now().After(deadline) {
 				return err
 			} else {
