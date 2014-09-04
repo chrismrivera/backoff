@@ -12,18 +12,18 @@ func (fe FatalError) Error() string {
 	return fe.Err.Error()
 }
 
-type BackoffWaiter struct {
+type Backoff struct {
 	a               int
 	b               int
 	maxWait         int
 	waitCalledCount int
 }
 
-func NewBackoffWaiter(maxWait int) *BackoffWaiter {
-	return &BackoffWaiter{0, 1, maxWait, 0}
+func New(maxWait int) *Backoff {
+	return &Backoff{0, 1, maxWait, 0}
 }
 
-func (bw *BackoffWaiter) Wait() {
+func (bw *Backoff) Wait() {
 	bw.waitCalledCount++
 
 	bw.b, bw.a = bw.b+bw.a, bw.b
@@ -36,16 +36,16 @@ func (bw *BackoffWaiter) Wait() {
 	<-time.After(time.Second * time.Duration(wait))
 }
 
-func (bw *BackoffWaiter) Reset() {
+func (bw *Backoff) Reset() {
 	bw.a = 0
 	bw.b = 1
 }
 
-func (bw *BackoffWaiter) WaitCalledCount() int {
+func (bw *Backoff) WaitCalledCount() int {
 	return bw.waitCalledCount
 }
 
-func (bw *BackoffWaiter) Try(attempts int, f func() error) error {
+func (bw *Backoff) Try(attempts int, f func() error) error {
 	for {
 		err := f()
 		if err != nil {
@@ -55,17 +55,17 @@ func (bw *BackoffWaiter) Try(attempts int, f func() error) error {
 
 			if bw.waitCalledCount >= attempts-1 {
 				return err
-			} else {
-				bw.Wait()
-				continue
 			}
+
+			bw.Wait()
+			continue
 		}
 
 		return nil
 	}
 }
 
-func (bw *BackoffWaiter) TryWithDeadline(relativeDeadline time.Duration, f func() error) error {
+func (bw *Backoff) TryWithDeadline(relativeDeadline time.Duration, f func() error) error {
 	deadline := time.Now().Add(relativeDeadline)
 
 	for {
@@ -77,10 +77,10 @@ func (bw *BackoffWaiter) TryWithDeadline(relativeDeadline time.Duration, f func(
 
 			if time.Now().After(deadline) {
 				return err
-			} else {
-				bw.Wait()
-				continue
 			}
+
+			bw.Wait()
+			continue
 		}
 
 		return nil
@@ -88,11 +88,11 @@ func (bw *BackoffWaiter) TryWithDeadline(relativeDeadline time.Duration, f func(
 }
 
 func Try(maxWait, attempts int, f func() error) error {
-	bw := NewBackoffWaiter(maxWait)
+	bw := New(maxWait)
 	return bw.Try(attempts, f)
 }
 
 func TryWithDeadline(maxWait int, relativeDeadline time.Duration, f func() error) error {
-	bw := NewBackoffWaiter(maxWait)
+	bw := New(maxWait)
 	return bw.TryWithDeadline(relativeDeadline, f)
 }
