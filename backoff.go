@@ -23,7 +23,7 @@ func New(maxWait int) *Backoff {
 	return &Backoff{0, 1, maxWait, 0}
 }
 
-func (bw *Backoff) Wait() {
+func (bw *Backoff) waitTime() time.Duration {
 	bw.waitCalledCount++
 
 	bw.b, bw.a = bw.b+bw.a, bw.b
@@ -33,7 +33,22 @@ func (bw *Backoff) Wait() {
 		wait = bw.maxWait
 	}
 
-	<-time.After(time.Second * time.Duration(wait))
+	return time.Second * time.Duration(wait)
+}
+
+func (bw *Backoff) Wait() {
+	<-time.After(bw.waitTime())
+}
+
+// Waits for the backoff duration or until stop is read.
+// Returns true if interrupted by the stop channel.
+func (bw *Backoff) InterruptableWait(stop <-chan struct{}) bool {
+	select {
+	case <-time.After(bw.waitTime()):
+		return false
+	case <-stop:
+		return true
+	}
 }
 
 func (bw *Backoff) Reset() {
