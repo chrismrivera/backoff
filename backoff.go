@@ -1,8 +1,13 @@
 package backoff
 
 import (
+	"math/rand"
 	"time"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 type FatalError struct {
 	Err error
@@ -15,28 +20,37 @@ func (fe FatalError) Error() string {
 type Backoff struct {
 	a               int
 	b               int
-	maxWait         int
+	maxWait         time.Duration
 	waitCalledCount int
 }
 
-func New(maxWait int) *Backoff {
+func New(maxWait time.Duration) *Backoff {
 	return &Backoff{0, 1, maxWait, 0}
 }
 
-func (bw *Backoff) waitTime() time.Duration {
-	bw.waitCalledCount++
+func (bw *Backoff) Reset() {
+	bw.a = 0
+	bw.b = 1
+}
 
+func (bw *Backoff) WaitCalledCount() int {
+	return bw.waitCalledCount
+}
+
+func (bw *Backoff) waitTime() time.Duration {
 	bw.b, bw.a = bw.b+bw.a, bw.b
 
-	wait := bw.b
-	if wait > bw.maxWait {
-		wait = bw.maxWait
+	base := time.Second * time.Duration(bw.b)
+	if base > bw.maxWait {
+		base = bw.maxWait
 	}
 
-	return time.Second * time.Duration(wait)
+	jitter := rand.Int63n(int64(base / 2))
+	return base/2 + time.Duration(jitter)
 }
 
 func (bw *Backoff) Wait() {
+	bw.waitCalledCount++
 	<-time.After(bw.waitTime())
 }
 
@@ -51,41 +65,11 @@ func (bw *Backoff) InterruptableWait(stop <-chan struct{}) bool {
 	}
 }
 
-func (bw *Backoff) Reset() {
-	bw.a = 0
-	bw.b = 1
-}
-
-func (bw *Backoff) WaitCalledCount() int {
-	return bw.waitCalledCount
-}
-
-func (bw *Backoff) Try(attempts int, f func() error) error {
-	for {
-		err := f()
-		if err != nil {
-			if fatalErr, ok := err.(FatalError); ok {
-				return fatalErr.Err
-			}
-
-			if bw.waitCalledCount >= attempts-1 {
-				return err
-			}
-
-			bw.Wait()
-			continue
-		}
-
-		return nil
-	}
-}
-
-func (bw *Backoff) TryWithDeadline(relativeDeadline time.Duration, f func() error) error {
+func (bw *Backoff) Try(relativeDeadline time.Duration, f func() error) error {
 	deadline := time.Now().Add(relativeDeadline)
 
 	for {
-		err := f()
-		if err != nil {
+		if err := f(); err != nil {
 			if fatalErr, ok := err.(FatalError); ok {
 				return fatalErr.Err
 			}
@@ -102,12 +86,7 @@ func (bw *Backoff) TryWithDeadline(relativeDeadline time.Duration, f func() erro
 	}
 }
 
-func Try(maxWait, attempts int, f func() error) error {
+func Try(maxWait, relativeDeadline time.Duration, f func() error) error {
 	bw := New(maxWait)
-	return bw.Try(attempts, f)
-}
-
-func TryWithDeadline(maxWait int, relativeDeadline time.Duration, f func() error) error {
-	bw := New(maxWait)
-	return bw.TryWithDeadline(relativeDeadline, f)
+	return bw.Try(relativeDeadline, f)
 }
